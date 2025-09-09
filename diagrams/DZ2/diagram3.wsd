@@ -1,0 +1,142 @@
+@startuml
+title Оформление заказа — дополнительные сценарии (корзина, предварительный заказ, уведомление менеджера)
+
+actor Customer as C
+actor "Store Manager" as M
+participant "Web UI" as UI
+participant "Order Controller" as OC
+participant "Payment Service" as PS
+database "Database" as DB
+participant "Notification Service" as NS
+
+' СЦЕНАРИЙ 1: Изменение товара в корзине 
+group Изменение корзины
+  C -> UI : Изменить состав корзины (добавить/убрать товары)
+  activate UI
+  note right of UI
+    Покупатель редактирует корзину до оформления заказа.
+    UI пересчитывает суммы и проверяет ограничения.
+  end note
+
+  UI -> OC : Обновлённые данные корзины
+  activate OC
+
+  OC -> DB : Проверить наличие и цены
+  activate DB
+  alt Все товары доступны
+    DB -[#green]-> OC : Проверка пройдена
+    note right of OC
+      Проверка стоков и актуальных цен успешна.
+    end note
+  else Нет в наличии / изменилась цена
+    DB -[#red]-> OC : Предупреждения/ошибки
+    OC -[#red]-> UI : Сообщить о недоступных позициях
+    UI -[#red]-> C : Показать сообщение и варианты замены
+    note right of UI
+      Пользователь может заменить/удалить позиции
+      и повторить проверку.
+    end note
+  end
+  deactivate DB
+end
+deactivate OC
+deactivate UI
+
+' СЦЕНАРИЙ 2: Оформление заказа 
+group Оформление заказа
+  C -> UI : Запрос на оформление заказа
+  activate UI
+
+  UI -> OC : Данные заказа
+  activate OC
+
+  OC -[#green]-> DB : Сохранить заказ (черновик)
+  activate DB
+  DB --> OC : OK (ID заказа)
+  deactivate DB
+  note right of OC
+    На этом шаге создаётся запись заказа
+    в статусе "черновик".
+  end note
+end
+
+' СЦЕНАРИЙ 3: Оплата (alt: успех/ошибка) 
+group Оплата
+  OC -> PS : Провести платеж
+  activate PS
+
+  alt Успешная оплата
+    PS -[#green]-> OC : Результат: Успех
+    opt Асинхронное уведомление от платёжного сервиса
+      PS -[#lightblue]->> OC : Webhook: подтверждение транзакции
+      note right of OC
+        Webhook приходит асинхронно (#lightblue) и
+        сверяется с локальным статусом платежа.
+      end note
+    end
+
+    OC -[#green]-> DB : Обновить статус заказа=Оплачен
+    activate DB
+    DB --> OC : OK
+    deactivate DB
+
+  else Ошибка при платеже
+    PS -[#red]-> OC : Ошибка платежа
+    note right of OC
+      Платёж не прошёл: отказ банка, лимит, таймаут и т.п.
+    end note
+
+    group Сохранение предварительного заказа
+      OC -[#green]-> DB : Обновить статус заказа=Предварительный
+      activate DB
+      DB --> OC : OK
+      deactivate DB
+      note right of OC
+        Заказ сохраняется как предварительный,
+        товары могут быть зарезервированы ограниченное время.
+      end note
+    end
+  end
+  deactivate PS
+end
+
+' СЦЕНАРИЙ 4: Подтверждение / информирование покупателя 
+group Подтверждение
+  alt Оплата прошла успешно
+    OC -> UI : Подтверждение заказа (номер, сумма, статус)
+    UI -> C : Показать подтверждение
+    note right of UI
+      Покупателю отображается успешное оформление,
+      отправляется чек/квитанция.
+    end note
+  else Оплата не прошла (предварительный)
+    OC -[#red]-> UI : Сообщение об ошибке оплаты
+    UI -[#red]-> C : Показать варианты: повторить платёж / сменить метод
+    note right of UI
+      Заказ сохранён как "предварительный".
+      Доступны действия: повторить оплату, изменить методы.
+    end note
+  end
+end
+
+' СЦЕНАРИЙ 5: Асинхронное уведомление менеджера 
+group Уведомление менеджера о новом заказе
+  OC -[#lightblue]->> NS : Событие: заказ создан/обновлён (ID, статус)
+  activate NS
+  note right of NS
+    Асинхронная интеграция (#lightblue):
+    Notification Service рассылает внутренние уведомления.
+  end note
+
+  NS -[#lightblue]->> M : Уведомление менеджеру (канал: email/chat)
+  deactivate NS
+  note right of M
+    Менеджер видит новые заказы и при необходимости
+    инициирует ручную проверку/связь с клиентом.
+  end note
+end
+
+deactivate OC
+deactivate UI
+
+@enduml
