@@ -1,0 +1,81 @@
+@startuml
+title Система оплаты офлайн-магазина (4 принципа ООП)
+
+package "Payment System" {
+  ' АБСТРАКЦИЯ
+  abstract class Payment {
+    - amount : Decimal
+    - paymentDate : Date
+    - transactionId : String
+
+    + getAmount() : Decimal
+    + setAmount(amount : Decimal)
+    + getPaymentDate() : Date
+    + setPaymentDate(date : Date)
+    + getTransactionId() : String
+    {abstract} + processPayment() : boolean
+  }
+
+  ' НАСЛЕДНИКИ
+  class CashPayment extends Payment {
+    - cashProvided : Decimal
+
+    + getCashProvided() : Decimal
+    + setCashProvided(value : Decimal)
+    + calculateChange() : Decimal
+    + processPayment() : boolean
+  }
+
+  class CardPayment extends Payment {
+    - cardNumber : String
+    - cardHolderName : String
+    - expiryDate : Date
+
+    + getCardNumber() : String
+    + setCardNumber(num : String)
+    + getCardHolderName() : String
+    + setCardHolderName(name : String)
+    + getExpiryDate() : Date
+    + setExpiryDate(date : Date)
+    + validateCard() : boolean
+    + processPayment() : boolean
+  }
+
+  ' МЕНЕДЖЕР
+  class PaymentManager {
+    - payments : List<Payment>
+    + registerPayment(p : Payment)
+    + processAllPayments()
+    + getPayments() : List<Payment>
+  }
+
+  ' ОТНОШЕНИЯ
+  Payment <|-- CashPayment
+  Payment <|-- CardPayment
+  PaymentManager "1" o-- "0..*" Payment : управляет
+
+  ' Пояснения по принципам 
+  note right of Payment
+  АБСТРАКЦИЯ:
+  общий интерфейс processPayment().
+  end note
+
+  note bottom of CashPayment
+  ИНКАПСУЛЯЦИЯ:
+  приватные поля (-), доступ
+  через геттеры/сеттеры.
+  end note
+
+  note bottom of CardPayment
+  НАСЛЕДОВАНИЕ:
+  расширяют Payment и
+  реализуют processPayment().
+  end note
+
+  note right of PaymentManager
+  ПОЛИМОРФИЗМ:
+  processAllPayments() вызывает
+  processPayment() у разных типов.
+  end note
+}
+@enduml
